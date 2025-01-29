@@ -1,7 +1,22 @@
 [
   {
     "file": "src\\GLWidget.cpp",
-    "line": 678,
-    "message": "'class SnapManager' has no member named 'hasCurrentSnapPoint'; did you mean 'getCurrentSnapPoint'?"
+    "line": 343,
+    "message": "no declaration matches 'QVector2D GLWidget::calculatePerpendicularPoint(const QVector2D&, const QVector2D&, const QVector2D&) const'"
+  },
+  {
+    "file": "src\\GLWidget.cpp",
+    "line": 354,
+    "message": "no declaration matches 'QVector2D GLWidget::calculateParallelPoint(const QVector2D&, const QVector2D&, const QVector2D&) const'"
+  },
+  {
+    "file": "src\\GLWidget.cpp",
+    "line": 1514,
+    "message": "no matching function for call to 'GLWidget::calculatePerpendicularPoint(const QVector2D&, QVector2D&, QVector2D&) const'"
+  },
+  {
+    "file": "src\\GLWidget.cpp",
+    "line": 1515,
+    "message": "'calculateParallelPoint' was not declared in this scope"
   }
 ]

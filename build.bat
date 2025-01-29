@@ -239,30 +239,39 @@ if !ERRORLEVEL! EQU 0 (
     )
 )
 
-REM Create fix application script
+REM Create fix application script with proper syntax
 echo import json, sys > apply_fixes.py
-echo def apply_fix(file, line, fix):>> apply_fixes.py
-echo     with open(file, 'r') as f:>> apply_fixes.py
-echo         lines = f.readlines()>> apply_fixes.py
-echo     if 1 <= line <= len(lines):>> apply_fixes.py
-echo         lines[line-1] = fix.strip() + '\n'>> apply_fixes.py
-echo         with open(file, 'w') as f:>> apply_fixes.py
-echo             f.writelines(lines)>> apply_fixes.py
-echo         return True>> apply_fixes.py
-echo     return False>> apply_fixes.py
-echo.>> apply_fixes.py
-echo def main():>> apply_fixes.py
-echo     with open('fixes.json', 'r') as f:>> apply_fixes.py
-echo         fixes = json.load(f)>> apply_fixes.py
-echo     success = True>> apply_fixes.py
-echo     for fix in fixes:>> apply_fixes.py
-echo         if not apply_fix(fix['file'], fix['line'], fix['code']):>> apply_fixes.py
-echo             print(f"Failed to apply fix to {fix['file']} line {fix['line']}")>> apply_fixes.py
-echo             success = False>> apply_fixes.py
-echo     return 0 if success else 1>> apply_fixes.py
-echo.>> apply_fixes.py
-echo if __name__ == '__main__':>> apply_fixes.py
-echo     sys.exit(main())>> apply_fixes.py
+echo. >> apply_fixes.py
+echo def apply_fix(file, line, fix): >> apply_fixes.py
+echo     try: >> apply_fixes.py
+echo         with open(file, 'r', encoding='utf-8') as f: >> apply_fixes.py
+echo             lines = f.readlines() >> apply_fixes.py
+echo         if 1 ^<= line ^<= len(lines): >> apply_fixes.py
+echo             lines[line-1] = fix.strip() + '\n' >> apply_fixes.py
+echo             with open(file, 'w', encoding='utf-8') as f: >> apply_fixes.py
+echo                 f.writelines(lines) >> apply_fixes.py
+echo             return True >> apply_fixes.py
+echo         return False >> apply_fixes.py
+echo     except Exception as e: >> apply_fixes.py
+echo         print(f"Error applying fix: {e}") >> apply_fixes.py
+echo         return False >> apply_fixes.py
+echo. >> apply_fixes.py
+echo def main(): >> apply_fixes.py
+echo     try: >> apply_fixes.py
+echo         with open('fixes.json', 'r', encoding='utf-8') as f: >> apply_fixes.py
+echo             fixes = json.load(f) >> apply_fixes.py
+echo         success = True >> apply_fixes.py
+echo         for fix in fixes: >> apply_fixes.py
+echo             if not apply_fix(fix['file'], fix['line'], fix['code']): >> apply_fixes.py
+echo                 print(f"Failed to apply fix to {fix['file']} line {fix['line']}") >> apply_fixes.py
+echo                 success = False >> apply_fixes.py
+echo         return 0 if success else 1 >> apply_fixes.py
+echo     except Exception as e: >> apply_fixes.py
+echo         print(f"Error in main: {e}") >> apply_fixes.py
+echo         return 1 >> apply_fixes.py
+echo. >> apply_fixes.py
+echo if __name__ == '__main__': >> apply_fixes.py
+echo     sys.exit(main()) >> apply_fixes.py
 
 :build_process
 :build_loop
@@ -300,14 +309,19 @@ if !BUILD_ERROR! NEQ 0 (
         echo [] > fixes.json
         
         type build_errors.txt | "!PYTHON_PATH!" error_handler.py > errors_formatted.txt
-        for /f "tokens=1,2,3 delims=||" %%a in (errors_formatted.txt) do (
-            echo Processing error in %%a line %%b: %%c
-            call gh copilot suggest "Fix this C++ error in file %%a line %%b: %%c" > "fix_suggestion.txt" 2>nul
-            if exist "fix_suggestion.txt" (
-                echo Found potential fix, applying...
-                "!PYTHON_PATH!" -c "import json; fixes=json.load(open('fixes.json')); fixes.append({'file':'%%a','line':%%b,'code':open('fix_suggestion.txt').read().strip()}); json.dump(fixes,open('fixes.json','w'),indent=2)"
-                set "FIXES_FOUND=1"
-                del "fix_suggestion.txt"
+        if exist "errors_formatted.txt" (
+            for /f "tokens=1,2,3 delims=||" %%a in (errors_formatted.txt) do (
+                echo Processing error in %%a line %%b: %%c
+                call gh copilot suggest --format="%%~b" "Fix this C++ error: %%~c in file %%~a at line %%~b" > "fix_suggestion.txt" 2>nul
+                if exist "fix_suggestion.txt" (
+                    findstr /v /c:"No suggestion available" "fix_suggestion.txt" >nul
+                    if !ERRORLEVEL! EQU 0 (
+                        echo Found potential fix, applying...
+                        "!PYTHON_PATH!" -c "import json; f=open('fixes.json','r'); fixes=json.load(f); f.close(); fixes.append({'file':r'%%~a','line':int(%%~b),'code':open('fix_suggestion.txt','r').read().strip()}); f=open('fixes.json','w'); json.dump(fixes,f,indent=2); f.close()" 2>nul
+                        set "FIXES_FOUND=1"
+                    )
+                    del "fix_suggestion.txt"
+                )
             )
         )
         

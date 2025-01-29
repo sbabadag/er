@@ -241,29 +241,37 @@ private:
 
     void updateSnapHistory(const QVector2D& snapPoint, const QVector2D& dir);
     void clearSnapHistory();
-    QVector2D calculatePerpendicularPoint(const QVector2D& currentPoint);
+    QVector2D calculatePerpendicularPoint(const QVector2D& base, const QVector2D& ref, const QVector2D& dir) const;
+    QVector2D calculateParallelPoint(const QVector2D& base, const QVector2D& ref, const QVector2D& dir) const;
     
     // Timer for managing snap history
     QTimer* snapHistoryTimer;
 
-    // Track point system 
+    // Track point system - consolidated declarations
     struct TrackPoint {
         QVector2D point;
-        QVector2D direction;  // For parallel/perpendicular tracking
+        QVector2D direction;
         qint64 timestamp;
-        bool isBase;     // True if this is the base point for construction
+        bool isActive = false;
+        QVector2D reference;
+        bool isBase = false;
         enum Type {
             SNAP,
             TRACK,
             PARALLEL,
             PERP
-        } type;
+        } type = SNAP;
     };
-    
+
+    // Single instance of tracking variables
     std::vector<TrackPoint> trackPoints;
     TrackPoint currentTrackPoint;
+    TrackPoint lastTrackPoint;
     bool hasTrackPoint = false;
-    float trackTimeout = 2.0f;
+    bool hasActiveTracking = false;
+    static constexpr float trackTimeout = 2.0f;
+    static constexpr float trackSnapThreshold = 10.0f;
+    QTimer* trackTimer = nullptr;
 
     // Track point methods
     void setTrackPoint(const QVector2D& point, const QVector2D& dir);
@@ -273,13 +281,10 @@ private:
     void addTrackPoint(const QVector2D& point, const QVector2D& dir, TrackPoint::Type type);
     void updateTrackPoints();
     void drawTrackPoints() const;
-    
-    // Timer for track point cleanup
-    QTimer* trackTimer;
-
-    // Helper functions for track point calculations
-    QVector2D calculatePerpendicularPoint(const QVector2D& base, const QVector2D& ref, const QVector2D& dir) const;
-    QVector2D calculateParallelPoint(const QVector2D& base, const QVector2D& ref, const QVector2D& dir) const;
+    void updateTrackingPoint(const QVector2D& point);
+    void clearTrackingPoints();
+    bool isNearTrackPoint(const QVector2D& point, const TrackPoint& track) const;
+    QVector2D snapToTracking(const QVector2D& point) const;
 
     // Add intersection tracking
     struct IntersectionPoint {

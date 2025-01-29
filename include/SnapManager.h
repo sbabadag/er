@@ -23,6 +23,7 @@ public:
     void drawSnapMarker(const QVector2D& pan, float zoom);
     void updateSettings(float newSnapThreshold, float newZoom, const std::vector<Line>& lines);
     QVector2D getCurrentSnapPoint() const { return currentSnapPoint; }
+    bool hasCurrentSnapPoint() const { return getCurrentSnapPoint() != nullptr; }
 
 private:
     // Add the intersection helper function declaration

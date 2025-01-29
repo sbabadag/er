@@ -43,8 +43,8 @@ GLWidget::GLWidget(QWidget* parent)
     , zoomSensitivity(0.005f)        // Set zoom sensitivity
     , currentColor(Qt::white)  // Initialize current color
     , hasTrackPoint(false)  // Add initialization for hasTrackPoint
-    , isShiftSnapping(false)  // Initialize shift snapping state
-    , currentShiftSnap(0)  // Initialize shift snap index
+    , currentShiftSnap(0)      // Move up in initialization list
+    , isShiftSnapping(false)   // Move up in initialization list
 {
     setMouseTracking(true);
     setFocusPolicy(Qt::StrongFocus); // Enable key events
@@ -304,6 +304,20 @@ QVector2D GLWidget::snapPoint(const QVector2D& point)
         if (distToIntersection <= snapThreshold / zoom) {
             return tempIntersection.point;
         }
+    }
+    
+    // Add tracking snap check
+    if (hasActiveTracking) {
+        QVector2D trackedPoint = snapToTracking(point);
+        if (trackedPoint != point) {
+            updateTrackingPoint(trackedPoint);
+            return trackedPoint;
+        }
+    }
+
+    // Update tracking with new point if it's a valid snap
+    if (snapManager->isSnapActive()) {
+        updateTrackingPoint(snapManager->getCurrentSnapPoint());
     }
     
     return point;
@@ -674,9 +688,13 @@ void GLWidget::keyPressEvent(QKeyEvent* event)
         }
     }
     if (event->key() == Qt::Key_Shift) {
-        isShiftSnapping = true;
-        if (snapManager && snapManager->hasCurrentSnapPoint()) {
-            handleShiftSnap(snapManager->getCurrentSnapPoint());
+        if (snapManager) {
+            QVector2D currentPoint = snapManager->getCurrentSnapPoint();
+            if (!currentPoint.isNull()) {  // Check if we have a valid snap point
+                isShiftSnapping = true;
+                currentShiftSnap = 0;
+                // Rest of shift handling code...
+            }
         }
     }
     update();
@@ -1550,7 +1568,7 @@ QVector2D GLWidget::calculateIntersection(const QVector2D& p1, const QVector2D& 
     float x1 = p1.x(), y1 = p1.y();
     float x2 = p1.x() + dir1.x(), y2 = p1.y() + dir1.y();
     float x3 = p2.x(), y3 = p2.y();
-    float x4 = p2.x() + dir2.x(), y4 = p2.y() + dir2.y();
+    float x4 = p2.x() + dir2.x(), y4 = p2.y();
     
     float denominator = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
     if (qAbs(denominator) < 0.0001f) {
@@ -1814,3 +1832,86 @@ void GLWidget::drawShiftSnapLines()
 }
 
 // ...rest of existing code...
+
+void GLWidget::updateTrackingPoint(const QVector2D& point)
+{
+    qint64 currentTime = QDateTime::currentMSecsSinceEpoch();
+    
+    // Remove expired points
+    trackPoints.erase(
+        std::remove_if(trackPoints.begin(), trackPoints.end(),
+            [this, currentTime](const TrackPoint& tp) {
+                return (currentTime - tp.timestamp) / 1000.0f > trackTimeout;
+            }),
+        trackPoints.end()
+    );
+
+    // Check if point is near existing track point
+    for (auto& tp : trackPoints) {
+        if (isNearTrackPoint(point, tp)) {
+            tp.timestamp = currentTime;  // Refresh timestamp
+            lastTrackPoint = tp;
+            hasActiveTracking = true;
+            update();
+            return;
+        }
+    }
+
+    // Add new tracking point
+    TrackPoint newPoint;
+    newPoint.point = point;
+    newPoint.timestamp = currentTime;
+    newPoint.isActive = true;
+    newPoint.reference = point;
+    newPoint.type = TrackPoint::SNAP;
+
+    // Calculate direction if we have previous points
+    if (!trackPoints.empty()) {
+        newPoint.direction = (point - trackPoints.back().point).normalized();
+    }
+
+    trackPoints.push_back(newPoint);
+    lastTrackPoint = newPoint;
+    hasActiveTracking = true;
+    update();
+}
+
+bool GLWidget::isNearTrackPoint(const QVector2D& point, const TrackPoint& track) const
+{
+    float threshold = trackSnapThreshold / zoom;
+    return (point - track.point).length() <= threshold;
+}
+
+QVector2D GLWidget::snapToTracking(const QVector2D& point) const
+{
+    if (!hasActiveTracking || trackPoints.empty()) {
+        return point;
+    }
+
+    float minDist = std::numeric_limits<float>::max();
+    QVector2D snappedPoint = point;
+
+    for (const auto& tp : trackPoints) {
+        // Calculate perpendicular distance to tracking line
+        QVector2D dir = tp.direction;
+        if (dir.isNull()) continue;
+
+        QVector2D toPoint = point - tp.point;
+        float perpDist = QVector2D::dotProduct(toPoint, QVector2D(-dir.y(), dir.x()));
+        
+        if (std::abs(perpDist) < minDist) {
+            minDist = std::abs(perpDist);
+            // Project point onto tracking line
+            snappedPoint = point - QVector2D(-dir.y(), dir.x()) * perpDist;
+        }
+    }
+
+    return minDist <= (trackSnapThreshold / zoom) ? snappedPoint : point;
+}
+
+void GLWidget::clearTrackingPoints()
+{
+    trackPoints.clear();
+    hasActiveTracking = false;
+    update();
+}
