@@ -1,0 +1,7 @@
+[
+  {
+    "file": "src\\GLWidget.cpp",
+    "line": 678,
+    "message": "'class SnapManager' has no member named 'hasCurrentSnapPoint'; did you mean 'getCurrentSnapPoint'?"
+  }
+]

@@ -9,8 +9,12 @@
 
 GLWidget::GLWidget(QWidget* parent)
     : QOpenGLWidget(parent)
+    , QOpenGLFunctions()  // Add base class initialization
+    , hasFirstPoint(false)        // Match header order
+    , isSelectingRectangle(false)
+    , isDragging(false)
+    , isCrossingSelection(false)
     , isDrawing(false)
-    , hasFirstPoint(false)
     , lineToolActive(false)
     , firstPoint(0, 0)
     , currentStart(0, 0)
@@ -32,15 +36,15 @@ GLWidget::GLWidget(QWidget* parent)
     , currentDimOffset(20.0f)
     , objectSelected(false)
     , selectedObjectIndex(-1)
-    , isMoving(false)
     , isAwaitingMoveStartPoint(false)  // Match header order
-    , isDragging(false)                // Match header order
-    , isSelectingRectangle(false)
     , isAwaitingMoveEndPoint(false)   // Initialize new variable
     , isZooming(false)               // Initialize zoom state
     , zoomStartPos(QPoint())         // Initialize zoom start position
     , zoomSensitivity(0.005f)        // Set zoom sensitivity
     , currentColor(Qt::white)  // Initialize current color
+    , hasTrackPoint(false)  // Add initialization for hasTrackPoint
+    , isShiftSnapping(false)  // Initialize shift snapping state
+    , currentShiftSnap(0)  // Initialize shift snap index
 {
     setMouseTracking(true);
     setFocusPolicy(Qt::StrongFocus); // Enable key events
@@ -48,6 +52,31 @@ GLWidget::GLWidget(QWidget* parent)
     // Initialize SnapManager
     snapManager = new SnapManager(snapThreshold, zoom, lines);
     snapManager->updateSettings(snapThreshold, zoom, lines);  // Ensure initial settings are applied
+
+    // Initialize snap history timer
+    snapHistoryTimer = new QTimer(this);
+    snapHistoryTimer->setInterval(100);  // Check every 100ms
+    connect(snapHistoryTimer, &QTimer::timeout, this, [this]() {
+        if (lastSnap.isActive && (QDateTime::currentMSecsSinceEpoch() / 1000.0f - lastSnap.timestamp) > snapHistoryTimeout) {
+            clearSnapHistory();
+            update();
+        }
+    });
+    snapHistoryTimer->start();
+
+    // Initialize track timer
+    trackTimer = new QTimer(this);
+    trackTimer->setInterval(100);  // Check every 100ms
+    connect(trackTimer, &QTimer::timeout, this, &GLWidget::updateTrackPoints);
+    trackTimer->start();
+
+    tempIntersection.isValid = false;
+    lastSnapPoints[0] = {QVector2D(0,0), QVector2D(0,0)};
+    lastSnapPoints[1] = {QVector2D(0,0), QVector2D(0,0)};
+
+    // Initialize track lines
+    trackLines[0] = {QVector2D(0,0), QVector2D(0,0), false};
+    trackLines[1] = {QVector2D(0,0), QVector2D(0,0), false};
 }
 
 GLWidget::~GLWidget()
@@ -130,24 +159,195 @@ void GLWidget::paintGL()
         glVertex2f(bottomLeft.x(), bottomLeft.y());
         glEnd();
     }
+
+    // Draw temporary point if it exists
+    if (hasTempPoint) {
+        glColor4f(1.0f, 1.0f, 0.0f, 0.8f);  // Yellow color
+        glPointSize(8.0f);
+        glBegin(GL_POINTS);
+        glVertex2f(tempPoint.x(), tempPoint.y());
+        glEnd();
+        glPointSize(1.0f);
+    }
+
+    // Draw snap history and construction points
+    if (lastSnap.isActive) {
+        // Draw last snap point
+        glColor4f(1.0f, 1.0f, 0.0f, 0.5f);  // Yellow, semi-transparent
+        glPointSize(8.0f);
+        glBegin(GL_POINTS);
+        glVertex2f(lastSnap.point.x(), lastSnap.point.y());
+        glEnd();
+        
+        // Draw construction point if available
+        if (hasTempConstructPoint) {
+            glColor4f(0.0f, 1.0f, 1.0f, 0.8f);  // Cyan
+            glPointSize(6.0f);
+            glBegin(GL_POINTS);
+            glVertex2f(tempConstructPoint.x(), tempConstructPoint.y());
+            glEnd();
+            
+            // Draw construction line
+            glColor4f(0.0f, 1.0f, 1.0f, 0.3f);  // Faded cyan
+            glBegin(GL_LINES);
+            glVertex2f(lastSnap.point.x(), lastSnap.point.y());
+            glVertex2f(tempConstructPoint.x(), tempConstructPoint.y());
+            glEnd();
+        }
+        glPointSize(1.0f);
+    }
+
+    // Draw track points
+    drawTrackPoints();
+
+    // Draw track point and construction preview
+    if (hasTrackPoint) {
+        drawTrackPoint();
+        
+        // Draw potential construction point preview
+        QVector2D mousePos = screenToWorld(mapFromGlobal(QCursor::pos()));
+        QVector2D constructPoint = getConstructionPoint(mousePos);
+        
+        glPointSize(6.0f);
+        glColor4f(0.0f, 1.0f, 1.0f, 0.5f);  // Cyan for construction preview
+        glBegin(GL_POINTS);
+        glVertex2f(constructPoint.x(), constructPoint.y());
+        glEnd();
+        
+        // Draw construction line
+        glColor4f(0.0f, 1.0f, 1.0f, 0.3f);  // Faded cyan
+        glBegin(GL_LINES);
+        glVertex2f(currentTrackPoint.point.x(), currentTrackPoint.point.y());
+        glVertex2f(constructPoint.x(), constructPoint.y());
+        glEnd();
+        glPointSize(1.0f);
+    }
+
+    // Draw track lines
+    drawTrackLines();
+
+    // Draw temporary intersection point if valid
+    if (tempIntersection.isValid) {
+        glPointSize(8.0f);
+        glColor4f(1.0f, 0.0f, 1.0f, 0.8f);  // Magenta color for intersection
+        glBegin(GL_POINTS);
+        glVertex2f(tempIntersection.point.x(), tempIntersection.point.y());
+        glEnd();
+        glPointSize(1.0f);
+    }
+
+    // Draw shift snap points and lines
+    drawShiftSnapLines();
 }
 
 QVector2D GLWidget::snapPoint(const QVector2D& point)
 {
-    // Convert the point to world space for consistent snapping
+    // Skip snapping in delete mode
+    if (currentMode == MODE_DELETE) {
+        return point;
+    }
+
     QVector2D worldPoint = point;
     
+    // First check if we can snap to temp construction point
+    if (hasTempConstructPoint) {
+        float distToTemp = (worldPoint - tempConstructPoint).length();
+        if (distToTemp <= snapThreshold / zoom) {
+            return tempConstructPoint;
+        }
+    }
+
     // Update snap system with current settings
     snapManager->updateSettings(snapThreshold, zoom, lines);
     snapManager->updateSnap(worldPoint);
     
     if (snapManager->isSnapActive()) {
-        // Get snap point in world coordinates
         QVector2D snapPoint = snapManager->getCurrentSnapPoint();
+        
+        // Update tracking with snap point
+        updateTrackLine(snapPoint);
+
+        // Check for intersection snap
+        if (tempIntersection.isValid) {
+            float distToIntersection = (point - tempIntersection.point).length();
+            if (distToIntersection <= snapThreshold / zoom) {
+                return tempIntersection.point;
+            }
+        }
+        
+        if (!hasTrackPoint) {
+            // If no track point exists, create one
+            QVector2D dir = (snapPoint - point).normalized();
+            setTrackPoint(snapPoint, dir);
+        }
+        else {
+            // If we have a track point, check for construction point
+            QVector2D constructPoint = getConstructionPoint(snapPoint);
+            float distToConstruct = (constructPoint - point).length();
+            
+            if (distToConstruct <= snapThreshold / zoom) {
+                // Clear track point after using it
+                clearTrackPoint();
+                return constructPoint;
+            }
+        }
+        
+        // Update intersection tracking with new snap point
+        updateIntersectionPoint(snapPoint);
+        
         return snapPoint;
+    }
+
+    // Check if we can snap to intersection point
+    if (tempIntersection.isValid) {
+        float distToIntersection = (point - tempIntersection.point).length();
+        if (distToIntersection <= snapThreshold / zoom) {
+            return tempIntersection.point;
+        }
     }
     
     return point;
+}
+
+void GLWidget::updateSnapHistory(const QVector2D& snapPoint, const QVector2D& dir)
+{
+    lastSnap.point = snapPoint;
+    lastSnap.direction = dir;
+    lastSnap.timestamp = QDateTime::currentMSecsSinceEpoch() / 1000.0f;
+    lastSnap.isActive = true;
+}
+
+void GLWidget::clearSnapHistory()
+{
+    lastSnap.isActive = false;
+    hasTempConstructPoint = false;
+    tempIntersection.isValid = false;
+    currentSnapIndex = 0;
+    clearTrackLines();  // Clear track lines when clearing snap history
+}
+
+QVector2D GLWidget::calculatePerpendicularPoint(const QVector2D& base, const QVector2D& ref, const QVector2D& dir) const
+{
+    QVector2D v = base - ref;
+    float dist = v.length();
+    
+    if (dist < 0.0001f) return base;
+
+    float proj = QVector2D::dotProduct(v, dir);
+    return ref + dir * proj;
+}
+
+QVector2D GLWidget::calculateParallelPoint(const QVector2D& base, const QVector2D& ref, const QVector2D& dir) const
+{
+    QVector2D v = base - ref;
+    float dist = v.length();
+    
+    if (dist < 0.0001f) return base;
+
+    // Project onto perpendicular direction
+    QVector2D perpDir(-dir.y(), dir.x());
+    float proj = QVector2D::dotProduct(v, perpDir);
+    return base - perpDir * proj;
 }
 
 void GLWidget::resizeGL(int w, int h)
@@ -193,6 +393,13 @@ QVector2D GLWidget::constrainToOrtho(const QVector2D& start, const QVector2D& en
 
 void GLWidget::mousePressEvent(QMouseEvent* event)
 {
+    // Clear temporary point when starting a new action
+    clearTempPoint();
+    // Clear construction points on new action
+    clearSnapHistory();
+    clearTrackPoint();  // Clear track point on new action
+    clearTrackLines();  // Clear track lines on new action
+
     QVector2D worldPos = screenToWorld(event->pos());
     QVector2D snappedPos = snapPoint(worldPos);
 
@@ -203,6 +410,10 @@ void GLWidget::mousePressEvent(QMouseEvent* event)
     }
 
     if (event->button() == Qt::LeftButton) {
+        // Clear tracking lines on left click unless holding Shift
+        if (!(event->modifiers() & Qt::ShiftModifier)) {
+            clearTrackLines();
+        }
         if (currentMode == MODE_MOVE) {
             if (!isAwaitingMoveStartPoint && !isAwaitingMoveEndPoint) {
                 // First click: Select object and start ghost preview
@@ -237,6 +448,16 @@ void GLWidget::mousePressEvent(QMouseEvent* event)
             update();
             return;
         }
+        if (currentMode == MODE_DELETE) {
+            // Start rectangle selection in delete mode
+            isSelectingRectangle = true;
+            selectionStartPos = event->pos();
+            selectionEndPos = event->pos();
+            isCrossingSelection = false;
+            selectionRect = QRect(selectionStartPos, selectionEndPos);
+            update();
+            return;
+        }
         // ...existing code for other modes...
         else if (currentMode == MODE_LINE) {  // Prioritize line drawing
             if (!hasFirstPoint) {
@@ -266,6 +487,8 @@ void GLWidget::mousePressEvent(QMouseEvent* event)
                 isSelectingRectangle = true;
                 selectionStartPos = event->pos();
                 selectionEndPos = event->pos();
+                // Determine selection mode based on direction
+                isCrossingSelection = false;  // Will be determined during mouse movement
                 selectionRect = QRect(selectionStartPos, selectionEndPos);
             }
             // ...existing code for other modes...
@@ -333,6 +556,10 @@ void GLWidget::mouseMoveEvent(QMouseEvent* event)
     // Handle selection rectangle
     if (isSelectingRectangle) {
         selectionEndPos = event->pos();
+        // Determine crossing selection mode: 
+        // If dragging right to left OR bottom to top = crossing selection
+        isCrossingSelection = (selectionEndPos.x() < selectionStartPos.x()) || 
+                            (selectionEndPos.y() < selectionStartPos.y());
         selectionRect = QRect(selectionStartPos, selectionEndPos).normalized();
         update();
     }
@@ -356,6 +583,13 @@ void GLWidget::mouseReleaseEvent(QMouseEvent* event)
             isSelectingRectangle = false;
             performRectangleSelection(selectionRect);
             selectionRect = QRect();
+            
+            // If in delete mode, delete selected objects immediately
+            if (currentMode == MODE_DELETE && !selectedObjectIndices.empty()) {
+                deleteSelectedObjects();
+                currentCommand = "Objects deleted. Select more objects to delete or ESC to exit";
+                emit commandChanged(currentCommand);
+            }
         }
     }
     else if (event->button() == Qt::RightButton) {
@@ -419,10 +653,43 @@ void GLWidget::keyPressEvent(QKeyEvent* event)
     else if (event->key() == Qt::Key_Enter || event->key() == Qt::Key_Return) {
         processNumericInput("Enter");
     }
+    else if (event->key() == Qt::Key_Backspace) {
+        processNumericInput("Backspace");
+    }
     else if (event->key() == Qt::Key_Escape) {
+        if (currentMode == MODE_DELETE) {
+            // Exit delete mode and update button state
+            setCurrentMode(MODE_NONE);
+            if (deleteButton) {
+                deleteButton->setDown(false);
+            }
+            currentCommand = "Delete mode canceled";
+            emit commandChanged(currentCommand);
+        }
         cancelDrawing();
     }
+    else if (event->key() == Qt::Key_Delete) {
+        if (currentMode != MODE_DELETE) {
+            startDeleteMode();
+        }
+    }
+    if (event->key() == Qt::Key_Shift) {
+        isShiftSnapping = true;
+        if (snapManager && snapManager->hasCurrentSnapPoint()) {
+            handleShiftSnap(snapManager->getCurrentSnapPoint());
+        }
+    }
     update();
+}
+
+void GLWidget::keyReleaseEvent(QKeyEvent* event)
+{
+    if (event->key() == Qt::Key_Shift) {
+        isShiftSnapping = false;
+        clearShiftSnaps();
+        update();
+    }
+    event->accept();
 }
 
 void GLWidget::addLine(const QVector2D& start, const QVector2D& end)
@@ -448,7 +715,10 @@ void GLWidget::updateCommandStatus()
     if (!m_statusBar) return;
     
     QString status;
-    if (currentMode == MODE_MOVE) {
+    if (currentMode == MODE_DELETE) {
+        status = "Delete Mode: Select objects to delete (ESC to exit)";
+    }
+    else if (currentMode == MODE_MOVE) {
         if (isAwaitingMoveStartPoint) {
             status = "Move Mode: Click to set Move Start Point";
         }
@@ -522,7 +792,26 @@ void GLWidget::processNumericInput(const QString& key)
             updateCommandStatus();
             update();
         }
-    } else {
+    } 
+    else if (key == "Backspace") {
+        if (!lengthInput.isEmpty()) {
+            lengthInput.chop(1); // Remove last character
+            if (lengthInput.isEmpty()) {
+                hasLengthConstraint = false;
+            } else {
+                targetLength = lengthInput.toFloat();
+                hasLengthConstraint = true;
+                if (hasFirstPoint) {
+                    QVector2D direction = currentEnd - currentStart;
+                    if (direction.length() > 0) {
+                        direction.normalize();
+                        currentEnd = currentStart + direction * targetLength;
+                    }
+                }
+            }
+        }
+    }
+    else {
         lengthInput += key;
         // Apply length immediately while typing
         if (!lengthInput.isEmpty()) {
@@ -744,6 +1033,12 @@ void GLWidget::setCurrentMode(DrawMode mode)
 {
     currentMode = mode;
     
+    // Update all tool button states
+    if (deleteButton) deleteButton->setDown(mode == MODE_DELETE);
+    if (moveButton) moveButton->setDown(mode == MODE_MOVE);
+    if (lineButton) lineButton->setDown(mode == MODE_LINE);
+    if (dimensionButton) dimensionButton->setDown(mode == MODE_DIMENSION);
+    
     // Reset and reinitialize snap system when changing modes
     if (snapManager) {
         snapManager->updateSettings(snapThreshold, zoom, lines);
@@ -765,9 +1060,22 @@ void GLWidget::setCurrentMode(DrawMode mode)
         currentCommand = "Ready";
     }
 
-    emit commandChanged(currentCommand); // Ensure signal is emitted
+    emit commandChanged(currentCommand);
     updateCommandStatus();
+    update();
 }
+
+// Add these new methods to set button pointers
+void GLWidget::setToolButtons(QToolButton* line, QToolButton* move, 
+                            QToolButton* del, QToolButton* dimension)
+{
+    lineButton = line;
+    moveButton = move;
+    deleteButton = del;
+    dimensionButton = dimension;
+}
+
+// ...existing code...
 
 void GLWidget::setCurrentCommand(const QString& command)
 {
@@ -799,60 +1107,71 @@ void GLWidget::performRectangleSelection(const QRect& rect)
 
     for (size_t i = 0; i < lines.size(); ++i) {
         const Line& line = lines[i];
-        // Check if the line intersects with the selection rectangle
-        // Using Cohen-Sutherland algorithm or any line-rectangle intersection method
+        bool shouldSelect = false;
 
-        // Define the four edges of the rectangle
-        QVector2D rectTopLeft = topLeft;
-        QVector2D rectTopRight = topRight;
-        QVector2D rectBottomRight = bottomRight;
-        QVector2D rectBottomLeft = bottomLeft;
+        if (isCrossingSelection) {
+            // Crossing selection (right-to-left OR bottom-to-top):
+            // Select if line intersects with rectangle or has endpoint inside
+            bool intersects = false;
+            intersects |= linesIntersect(line.start, line.end, topLeft, topRight);
+            intersects |= linesIntersect(line.start, line.end, topRight, bottomRight);
+            intersects |= linesIntersect(line.start, line.end, bottomRight, bottomLeft);
+            intersects |= linesIntersect(line.start, line.end, bottomLeft, topLeft);
 
-        // Function to check if two line segments intersect
-        auto linesIntersect = [](const QVector2D& p1, const QVector2D& p2,
-                                const QVector2D& q1, const QVector2D& q2) -> bool {
-            auto orientation = [&](const QVector2D& a, const QVector2D& b, const QVector2D& c) -> int {
-                float val = (b.y() - a.y()) * (c.x() - b.x()) - 
-                            (b.x() - a.x()) * (c.y() - b.y());
-                if (val == 0.0f) return 0; // colinear
-                return (val > 0.0f) ? 1 : 2; // clock or counterclock wise
-            };
+            bool pointInside = worldRect.contains(QPointF(line.start.x(), line.start.y())) ||
+                             worldRect.contains(QPointF(line.end.x(), line.end.y()));
 
-            int o1 = orientation(p1, p2, q1);
-            int o2 = orientation(p1, p2, q2);
-            int o3 = orientation(q1, q2, p1);
-            int o4 = orientation(q1, q2, p2);
+            shouldSelect = intersects || pointInside;
+        } else {
+            // Window selection (left-to-right AND top-to-bottom):
+            // Select only if line is completely inside
+            shouldSelect = worldRect.contains(QPointF(line.start.x(), line.start.y())) &&
+                         worldRect.contains(QPointF(line.end.x(), line.end.y()));
+        }
 
-            if (o1 != o2 && o3 != o4)
-                return true;
-
-            return false;
-        };
-
-        bool intersects = false;
-        // Check intersection with all four edges of the rectangle
-        intersects |= linesIntersect(line.start, line.end, rectTopLeft, rectTopRight);
-        intersects |= linesIntersect(line.start, line.end, rectTopRight, rectBottomRight);
-        intersects |= linesIntersect(line.start, line.end, rectBottomRight, rectBottomLeft);
-        intersects |= linesIntersect(line.start, line.end, rectBottomLeft, rectTopLeft);
-
-        // Additionally, check if the entire line is inside the rectangle
-        bool inside = worldRect.contains(QPointF(line.start.x(), line.start.y())) &&
-                      worldRect.contains(QPointF(line.end.x(), line.end.y()));
-
-        if (intersects || inside) {
+        if (shouldSelect) {
             selectedObjectIndices.push_back(static_cast<int>(i));
         }
     }
 
-    if (!selectedObjectIndices.empty()) {
-        objectSelected = true;
-        selectedObjectIndex = selectedObjectIndices[0];  // Highlight the first selected object
-    }
-    else {
-        objectSelected = false;
+    objectSelected = !selectedObjectIndices.empty();
+    if (objectSelected) {
+        selectedObjectIndex = selectedObjectIndices[0];
+    } else {
         selectedObjectIndex = -1;
     }
+    
+    // Update status after selection
+    updateCommandStatus();
+    update();
+}
+
+void GLWidget::deleteSelectedObjects()
+{
+    if (selectedObjectIndices.empty()) return;
+
+    // Sort indices in descending order to remove from back to front
+    std::sort(selectedObjectIndices.begin(), selectedObjectIndices.end(), std::greater<int>());
+
+    // Remove the selected lines
+    for (int index : selectedObjectIndices) {
+        if (index >= 0 && index < static_cast<int>(lines.size())) {
+            lines.erase(lines.begin() + index);
+        }
+    }
+
+    // Clear selection
+    selectedObjectIndices.clear();
+    objectSelected = false;
+    selectedObjectIndex = -1;
+
+    // Update snap manager and UI
+    if (snapManager) {
+        snapManager->updateSettings(snapThreshold, zoom, lines);
+    }
+    
+    updateCommandStatus();
+    update();
 }
 
 // ...existing code...
@@ -1027,3 +1346,471 @@ void GLWidget::setSelectedObjectsColor(const QColor& color)
     }
     update();
 }
+
+// Add the line intersection helper function
+bool GLWidget::linesIntersect(const QVector2D& p1, const QVector2D& p2,
+                            const QVector2D& q1, const QVector2D& q2) const
+{
+    auto orientation = [](const QVector2D& a, const QVector2D& b, const QVector2D& c) -> int {
+        float val = (b.y() - a.y()) * (c.x() - b.x()) - 
+                    (b.x() - a.x()) * (c.y() - b.y());
+        if (val == 0.0f) return 0; // colinear
+        return (val > 0.0f) ? 1 : 2; // clock or counterclock wise
+    };
+
+    int o1 = orientation(p1, p2, q1);
+    int o2 = orientation(p1, p2, q2);
+    int o3 = orientation(q1, q2, p1);
+    int o4 = orientation(q1, q2, p2);
+
+    if (o1 != o2 && o3 != o4)
+        return true;
+
+    return false;
+}
+
+// ...rest of existing code...
+
+void GLWidget::startDeleteMode()
+{
+    if (currentMode == MODE_DELETE) {
+        // If already in delete mode, exit it
+        setCurrentMode(MODE_NONE);
+        currentCommand = "Delete mode exited";
+    } else {
+        // Enter delete mode
+        setCurrentMode(MODE_DELETE);
+        currentCommand = "Delete Mode: Select objects to delete (snapping disabled)";
+        // Snapping is handled in snapPoint method, no need to modify SnapManager
+    }
+    emit commandChanged(currentCommand);
+    updateCommandStatus();
+    update();
+}
+
+// ...existing code...
+
+void GLWidget::clearTempPoint()
+{
+    hasTempPoint = false;
+    tempPointLifetime = 0.0f;
+    update();
+}
+
+void GLWidget::addTrackPoint(const QVector2D& point, const QVector2D& dir, TrackPoint::Type type)
+{
+    // Remove any existing track points that are too close
+    trackPoints.erase(
+        std::remove_if(trackPoints.begin(), trackPoints.end(),
+            [&](const TrackPoint& tp) {
+                return (tp.point - point).length() < snapThreshold / zoom;
+            }),
+        trackPoints.end()
+    );
+
+    TrackPoint tp;
+    tp.point = point;
+    tp.direction = dir;
+    tp.timestamp = QDateTime::currentMSecsSinceEpoch();
+    tp.type = type;
+    trackPoints.push_back(tp);
+}
+
+void GLWidget::updateTrackPoints()
+{
+    qint64 currentTime = QDateTime::currentMSecsSinceEpoch();
+    
+    trackPoints.erase(
+        std::remove_if(trackPoints.begin(), trackPoints.end(),
+            [&](const TrackPoint& tp) {
+                return (currentTime - tp.timestamp) / 1000.0f > trackTimeout;
+            }),
+        trackPoints.end()
+    );
+    
+    if (!trackPoints.empty()) {
+        update();
+    }
+}
+
+void GLWidget::drawTrackPoints() const
+{
+    for (const auto& tp : trackPoints) {
+        glPointSize(8.0f);
+        switch (tp.type) {
+            case TrackPoint::SNAP:
+                glColor4f(1.0f, 1.0f, 0.0f, 0.5f);  // Yellow
+                break;
+            case TrackPoint::TRACK:
+                glColor4f(0.0f, 1.0f, 1.0f, 0.5f);  // Cyan
+                break;
+            case TrackPoint::PARALLEL:
+                glColor4f(0.0f, 1.0f, 0.0f, 0.5f);  // Green
+                break;
+            case TrackPoint::PERP:
+                glColor4f(1.0f, 0.5f, 0.0f, 0.5f);  // Orange
+                break;
+        }
+        
+        // Draw the point
+        glBegin(GL_POINTS);
+        glVertex2f(tp.point.x(), tp.point.y());
+        glEnd();
+
+        // Draw direction indicator if applicable
+        if (tp.type == TrackPoint::PARALLEL || tp.type == TrackPoint::PERP) {
+            float len = 20.0f / zoom;
+            QVector2D end = tp.point + tp.direction * len;
+            glBegin(GL_LINES);
+            glVertex2f(tp.point.x(), tp.point.y());
+            glVertex2f(end.x(), end.y());
+            glEnd();
+        }
+    }
+    glPointSize(1.0f);
+}
+
+void GLWidget::setTrackPoint(const QVector2D& point, const QVector2D& dir)
+{
+    currentTrackPoint.point = point;
+    currentTrackPoint.direction = dir;
+    currentTrackPoint.timestamp = QDateTime::currentMSecsSinceEpoch();
+    currentTrackPoint.isBase = true;
+    hasTrackPoint = true;
+}
+
+void GLWidget::clearTrackPoint()
+{
+    hasTrackPoint = false;
+}
+
+QVector2D GLWidget::getConstructionPoint(const QVector2D& currentPos) const
+{
+    if (!hasTrackPoint) return currentPos;
+
+    QVector2D basePoint = currentTrackPoint.point;
+    QVector2D baseDir = currentTrackPoint.direction;
+    
+    // Calculate both perpendicular and parallel points
+    QVector2D perpDir(-baseDir.y(), baseDir.x());
+    QVector2D perpPoint = calculatePerpendicularPoint(currentPos, basePoint, perpDir);
+    QVector2D parPoint = calculateParallelPoint(currentPos, basePoint, baseDir);
+    
+    // Return the closest point to the current position
+    float perpDist = (perpPoint - currentPos).length();
+    float parDist = (parPoint - currentPos).length();
+    
+    return (perpDist < parDist) ? perpPoint : parPoint;
+}
+
+void GLWidget::drawTrackPoint() const
+{
+    if (!hasTrackPoint) return;
+
+    // Draw base point
+    glPointSize(8.0f);
+    glColor4f(1.0f, 1.0f, 0.0f, 0.5f);  // Yellow for base point
+    glBegin(GL_POINTS);
+    glVertex2f(currentTrackPoint.point.x(), currentTrackPoint.point.y());
+    glEnd();
+
+    // Draw direction indicator
+    float len = 20.0f / zoom;
+    QVector2D end = currentTrackPoint.point + currentTrackPoint.direction * len;
+    glBegin(GL_LINES);
+    glVertex2f(currentTrackPoint.point.x(), currentTrackPoint.point.y());
+    glVertex2f(end.x(), end.y());
+    glEnd();
+    glPointSize(1.0f);
+}
+
+void GLWidget::updateIntersectionPoint(const QVector2D& snapPoint)
+{
+    // Store the current snap point and its direction
+    lastSnapPoints[currentSnapIndex].point = snapPoint;
+    lastSnapPoints[currentSnapIndex].direction = (snapPoint - lastSnapPoints[1-currentSnapIndex].point).normalized();
+    
+    // Calculate intersection if we have two points
+    if (currentSnapIndex == 1) {
+        tempIntersection.point = calculateIntersection(
+            lastSnapPoints[0].point, lastSnapPoints[0].direction,
+            lastSnapPoints[1].point, lastSnapPoints[1].direction
+        );
+        tempIntersection.isValid = true;
+    }
+    
+    // Toggle index between 0 and 1
+    currentSnapIndex = 1 - currentSnapIndex;
+}
+
+QVector2D GLWidget::calculateIntersection(const QVector2D& p1, const QVector2D& dir1,
+                                        const QVector2D& p2, const QVector2D& dir2) const
+{
+    // Calculate intersection of two lines defined by point and direction
+    float x1 = p1.x(), y1 = p1.y();
+    float x2 = p1.x() + dir1.x(), y2 = p1.y() + dir1.y();
+    float x3 = p2.x(), y3 = p2.y();
+    float x4 = p2.x() + dir2.x(), y4 = p2.y() + dir2.y();
+    
+    float denominator = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+    if (qAbs(denominator) < 0.0001f) {
+        return (p1 + p2) * 0.5f; // Return midpoint if lines are parallel
+    }
+    
+    float t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denominator;
+    return QVector2D(x1 + t * (x2 - x1), y1 + t * (y2 - y1));
+}
+
+void GLWidget::updateTrackLine(const QVector2D& snapPoint)
+{
+    // If both lines not active yet, start first line
+    if (!trackLines[0].isActive) {
+        trackLines[0].start = snapPoint;
+        trackLines[0].end = snapPoint;
+        trackLines[0].isActive = true;
+        return;
+    }
+
+    // If first line active but second isn't, create second line
+    if (!trackLines[1].isActive) {
+        trackLines[1].start = snapPoint;
+        trackLines[1].end = snapPoint;
+        trackLines[1].isActive = true;
+        
+        // Calculate intersection right away
+        QVector2D dir1 = (trackLines[0].end - trackLines[0].start).normalized();
+        QVector2D dir2 = (snapPoint - snapPoint).normalized();  // Will be updated with mouse movement
+        tempIntersection.point = snapPoint;  // Start at snap point
+        tempIntersection.isValid = true;
+        return;
+    }
+
+    // Both lines exist, update end point of current line
+    if (currentSnapIndex == 0) {
+        trackLines[0].end = snapPoint;
+    } else {
+        trackLines[1].end = snapPoint;
+    }
+
+    // Update intersection if both lines are valid
+    QVector2D dir1 = (trackLines[0].end - trackLines[0].start).normalized();
+    QVector2D dir2 = (trackLines[1].end - trackLines[1].start).normalized();
+    
+    if (dir1.lengthSquared() > 0.0001f && dir2.lengthSquared() > 0.0001f) {
+        tempIntersection.point = calculateIntersection(
+            trackLines[0].start, dir1,
+            trackLines[1].start, dir2
+        );
+        tempIntersection.isValid = true;
+    }
+}
+
+void GLWidget::drawTrackLines() // Remove const qualifier
+{
+    glColor4f(0.0f, 0.8f, 0.8f, 0.5f);  // Cyan color for track lines
+    glLineWidth(1.0f);
+
+    glBegin(GL_LINES);
+    if (trackLines[0].isActive) {
+        glVertex2f(trackLines[0].start.x(), trackLines[0].start.y());
+        glVertex2f(trackLines[0].end.x(), trackLines[0].end.y());
+    }
+    if (trackLines[1].isActive) {
+        glVertex2f(trackLines[1].start.x(), trackLines[1].start.y());
+        glVertex2f(trackLines[1].end.x(), trackLines[1].end.y());
+    }
+    glEnd();
+}
+
+void GLWidget::clearTrackLines()
+{
+    trackLines[0].isActive = false;
+    trackLines[1].isActive = false;
+    tempIntersection.isValid = false;
+    currentSnapIndex = 0;
+}
+
+void GLWidget::updateTracking(const QVector2D& snapPoint)
+{
+    qint64 currentTime = QDateTime::currentMSecsSinceEpoch();
+    
+    // Remove expired tracking points
+    trackingPoints.erase(
+        std::remove_if(trackingPoints.begin(), trackingPoints.end(),
+            [currentTime, this](const TrackingState& ts) {
+                return !ts.isActive || 
+                       ((currentTime - ts.timestamp) / 1000.0f) > trackingTimeout;
+            }),
+        trackingPoints.end());
+    
+    // Add new tracking point
+    TrackingState newTrack;
+    newTrack.point = snapPoint;
+    newTrack.isActive = true;
+    newTrack.timestamp = currentTime;
+    
+    // Determine tracking type
+    if (orthoMode) {
+        newTrack.type = TrackingState::ORTHO;
+        // Calculate nearest 90-degree direction
+        QVector2D mousePos = screenToWorld(mapFromGlobal(QCursor::pos()));
+        QVector2D dir = (mousePos - snapPoint).normalized();
+        float angle = atan2(dir.y(), dir.x());
+        angle = round(angle / (M_PI/2)) * (M_PI/2);
+        newTrack.direction = QVector2D(cos(angle), sin(angle));
+    } else {
+        newTrack.type = TrackingState::NORMAL;
+        if (!trackingPoints.empty()) {
+            newTrack.direction = (snapPoint - trackingPoints.back().point).normalized();
+        }
+    }
+    
+    trackingPoints.push_back(newTrack);
+}
+
+void GLWidget::drawTrackingLines()
+{
+    for (const auto& track : trackingPoints) {
+        if (!track.isActive) continue;
+        
+        // Draw track line
+        glColor4f(0.0f, 0.8f, 0.8f, 0.3f);  // Cyan, semi-transparent
+        glBegin(GL_LINES);
+        float len = 1000.0f / zoom;  // Long enough to cross screen
+        QVector2D start = track.point - track.direction * len;
+        QVector2D end = track.point + track.direction * len;
+        glVertex2f(start.x(), start.y());
+        glVertex2f(end.x(), end.y());
+        glEnd();
+        
+        // Draw tracking point
+        drawTrackingPoint(track);
+    }
+}
+
+void GLWidget::drawTrackingPoint(const TrackingState& track)
+{
+    glPointSize(6.0f);
+    switch (track.type) {
+        case TrackingState::ORTHO:
+            glColor4f(0.0f, 1.0f, 0.0f, 0.8f);  // Green
+            break;
+        case TrackingState::PERP:
+            glColor4f(1.0f, 0.5f, 0.0f, 0.8f);  // Orange
+            break;
+        case TrackingState::PARALLEL:
+            glColor4f(0.0f, 0.8f, 1.0f, 0.8f);  // Light blue
+            break;
+        default:
+            glColor4f(1.0f, 1.0f, 0.0f, 0.8f);  // Yellow
+    }
+    
+    glBegin(GL_POINTS);
+    glVertex2f(track.point.x(), track.point.y());
+    glEnd();
+    glPointSize(1.0f);
+}
+
+QVector2D GLWidget::findTrackingIntersection(const QVector2D& mousePos)
+{
+    if (trackingPoints.size() < 2) return mousePos;
+    
+    // Find two nearest tracking lines
+    float minDist1 = std::numeric_limits<float>::max();
+    float minDist2 = std::numeric_limits<float>::max();
+    const TrackingState* track1 = nullptr;
+    const TrackingState* track2 = nullptr;
+    
+    for (const auto& track : trackingPoints) {
+        if (!track.isActive) continue;
+        
+        float dist = calculateDistanceToLine(mousePos, track.point, track.direction);
+        if (dist < minDist1) {
+            minDist2 = minDist1;
+            track2 = track1;
+            minDist1 = dist;
+            track1 = &track;
+        } else if (dist < minDist2) {
+            minDist2 = dist;
+            track2 = &track;
+        }
+    }
+    
+    if (track1 && track2) {
+        return calculateIntersection(
+            track1->point, track1->direction,
+            track2->point, track2->direction
+        );
+    }
+    
+    return mousePos;
+}
+
+void GLWidget::handleShiftSnap(const QVector2D& point) 
+{
+    if (currentShiftSnap < 2) {
+        // Store new snap point
+        shiftSnaps[currentShiftSnap].point = point;
+        shiftSnaps[currentShiftSnap].isActive = true;
+
+        if (currentShiftSnap == 1) {
+            // Calculate direction between points
+            QVector2D dir = (point - shiftSnaps[0].point).normalized();
+            shiftSnaps[0].direction = dir;
+            shiftSnaps[1].direction = dir;
+
+            // Calculate intersection and create temp point
+            tempIntersection.point = point;
+            tempIntersection.isValid = true;
+        }
+        
+        currentShiftSnap++;
+        update();
+    }
+}
+
+void GLWidget::clearShiftSnaps()
+{
+    shiftSnaps[0].isActive = false;
+    shiftSnaps[1].isActive = false;
+    currentShiftSnap = 0;
+    isShiftSnapping = false;
+    tempIntersection.isValid = false;
+    update();
+}
+
+void GLWidget::drawShiftSnapLines()
+{
+    if (!shiftSnaps[0].isActive) return;
+
+    // Draw first snap point
+    glPointSize(8.0f);
+    glColor4f(1.0f, 1.0f, 0.0f, 0.8f);  // Yellow
+    glBegin(GL_POINTS);
+    glVertex2f(shiftSnaps[0].point.x(), shiftSnaps[0].point.y());
+    glEnd();
+
+    if (shiftSnaps[1].isActive) {
+        // Draw second snap point
+        glVertex2f(shiftSnaps[1].point.x(), shiftSnaps[1].point.y());
+        
+        // Draw line between points
+        glColor4f(0.0f, 1.0f, 1.0f, 0.5f);  // Cyan
+        glBegin(GL_LINES);
+        glVertex2f(shiftSnaps[0].point.x(), shiftSnaps[0].point.y());
+        glVertex2f(shiftSnaps[1].point.x(), shiftSnaps[1].point.y());
+        glEnd();
+
+        // Draw intersection point
+        if (tempIntersection.isValid) {
+            glPointSize(10.0f);
+            glColor4f(1.0f, 0.0f, 1.0f, 0.8f);  // Magenta
+            glBegin(GL_POINTS);
+            glVertex2f(tempIntersection.point.x(), tempIntersection.point.y());
+            glEnd();
+        }
+    }
+    glPointSize(1.0f);
+}
+
+// ...rest of existing code...

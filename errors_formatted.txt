@@ -1,0 +1,1 @@
+src\GLWidget.cpp||678||'class SnapManager' has no member named 'hasCurrentSnapPoint'; did you mean 'getCurrentSnapPoint'?

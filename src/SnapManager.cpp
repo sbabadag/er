@@ -8,7 +8,7 @@
 SnapManager::SnapManager(float snapThreshold, float zoomLevel, const std::vector<Line>& lines)
     : snapThreshold(snapThreshold)
     , zoom(zoomLevel)
-    , lines(lines)
+    , lines(lines)  // Copy the lines
     , currentSnapPoint(0.0f, 0.0f)
     , snapActive(false)
     , currentSnapType(SNAP_NONE)
@@ -114,7 +114,7 @@ void SnapManager::updateSettings(float newSnapThreshold, float newZoom, const st
 {
     snapThreshold = std::max(newSnapThreshold, 1.0f);  // Ensure minimum threshold
     zoom = std::max(newZoom, 0.1f);  // Prevent zero or negative zoom
-    lines = newLines;
+    lines = newLines;  // Now can copy since lines is not const reference
     
     // Reset to clean state
     currentSnapType = SNAP_NONE;
@@ -122,9 +122,24 @@ void SnapManager::updateSettings(float newSnapThreshold, float newZoom, const st
     currentSnapPoint = QVector2D(0, 0);
 }
 
+bool SnapManager::checkTempPoint(const QVector2D& point, const QVector2D& tempPoint, bool hasTempPoint)
+{
+    if (!hasTempPoint) return false;
+    
+    float distance = (point - tempPoint).length();
+    if (distance <= snapThreshold / zoom) {
+        currentSnapPoint = tempPoint;
+        snapActive = true;
+        return true;
+    }
+    return false;
+}
+
 void SnapManager::updateSnap(const QVector2D& point)
 {
-    snapPoint(point);  // This will update all internal state
+    // Just call snapPoint directly - we're not handling temp points here
+    // That's handled in GLWidget
+    snapPoint(point);
 }
 
 void SnapManager::drawSnapMarker(const QVector2D& /*pan*/, float zoom)

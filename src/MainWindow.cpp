@@ -1,5 +1,5 @@
-#include "MainWindow.h"
-#include "GLWidget.h"
+#include "../include/MainWindow.h"
+#include "../include/GLWidget.h"
 #include <QMenuBar>
 #include <QMenu>
 #include <QAction>
@@ -7,11 +7,15 @@
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QColorDialog>
+#include <QPushButton>
+#include <QToolButton>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
+    , glWidget(new GLWidget(this))
+    , colorAction(nullptr)
+    , drawingToolbar(nullptr)
 {
-    glWidget = new GLWidget(this);
     setCentralWidget(glWidget);
     
     // Create status bar
@@ -21,7 +25,8 @@ MainWindow::MainWindow(QWidget *parent)
 
     createActions();    // Add this first
     createMenus();
-    createToolbars();  // Add toolbar creation
+    createToolbars();  // Add toolbar creation - this now handles all connections
+    // Remove setupConnections() call
 }
 
 MainWindow::~MainWindow()
@@ -67,28 +72,39 @@ void MainWindow::createToolbars()
     drawingToolbar->addSeparator();
     
     // Line tool
-    QAction* lineAction = drawingToolbar->addAction(tr("Line"));
-    lineAction->setStatusTip(tr("Draw Line"));
-    connect(lineAction, &QAction::triggered, this, &MainWindow::onStartLineDrawing);
+    lineButton = new QToolButton(this);
+    lineButton->setText(tr("Line"));
+    lineButton->setToolTip(tr("Draw Line"));
+    drawingToolbar->addWidget(lineButton);
+    connect(lineButton, &QToolButton::clicked, this, &MainWindow::onStartLineDrawing);
     
     // Dimension tool
-    QAction* dimAction = drawingToolbar->addAction(tr("Dimension"));
-    dimAction->setStatusTip(tr("Add Dimension"));
-    connect(dimAction, &QAction::triggered, this, &MainWindow::onStartDimensioning);
+    dimensionButton = new QToolButton(this);
+    dimensionButton->setText(tr("Dimension"));
+    dimensionButton->setToolTip(tr("Add Dimension"));
+    drawingToolbar->addWidget(dimensionButton);
+    connect(dimensionButton, &QToolButton::clicked, this, &MainWindow::onStartDimensioning);
     
     drawingToolbar->addSeparator();
     
     // Move tool
-    QAction* moveAction = drawingToolbar->addAction(tr("Move"));
-    moveAction->setStatusTip(tr("Move Objects"));
-    connect(moveAction, &QAction::triggered, this, &MainWindow::onStartMove);
+    moveButton = new QToolButton(this);
+    moveButton->setText(tr("Move"));
+    moveButton->setToolTip(tr("Move Objects"));
+    drawingToolbar->addWidget(moveButton);
+    connect(moveButton, &QToolButton::clicked, this, &MainWindow::onStartMove);
+    
+    // Delete tool
+    deleteButton = new QToolButton(this);
+    deleteButton->setText(tr("Delete"));
+    deleteButton->setToolTip(tr("Delete Objects"));
+    drawingToolbar->addWidget(deleteButton);
+    connect(deleteButton, &QToolButton::clicked, glWidget, &GLWidget::startDeleteMode);
     
     drawingToolbar->addSeparator();
     
-    // Zoom All
-    QAction* zoomAllAction = drawingToolbar->addAction(tr("Zoom All"));
-    zoomAllAction->setStatusTip(tr("Zoom to fit all objects"));
-    connect(zoomAllAction, &QAction::triggered, this, &MainWindow::onZoomAll);
+    // Set up tool buttons in GLWidget
+    glWidget->setToolButtons(lineButton, moveButton, deleteButton, dimensionButton);
 }
 
 void MainWindow::onSaveDxf()

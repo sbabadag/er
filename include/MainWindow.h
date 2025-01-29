@@ -1,6 +1,11 @@
-#pragma once
+#ifndef MAINWINDOW_H
+#define MAINWINDOW_H
+
 #include <QMainWindow>
 #include <QStatusBar>
+#include <QOpenGLWidget>
+#include <QOpenGLFunctions>
+#include "GLWidget.h"  // Add this include
 
 class GLWidget;
 class QToolBar;
@@ -14,20 +19,29 @@ public:
     ~MainWindow();
 
 private slots:
-    void onNew();  // Add this
+    void onNew();
     void onSaveDxf();
     void onLoadDxf();
-    void onStartLineDrawing();    // Add this
-    void onStartDimensioning();   // Add this
-    void onStartMove();          // Add this
-    void onZoomAll();           // Add this
+    void onStartLineDrawing();
+    void onStartDimensioning();
+    void onStartMove();
+    void onZoomAll();
     void showColorDialog();
 
 private:
+    void createActions();
     void createMenus();
-    void createToolbars();   // Add this
-    void createActions();    // Add this declaration
+    void createToolbars();
+
     GLWidget* glWidget;
-    QToolBar* drawingToolbar;
     QAction* colorAction;
+    QToolBar* drawingToolbar;
+    
+    // Add tool button members
+    QToolButton* lineButton;
+    QToolButton* moveButton;
+    QToolButton* deleteButton;
+    QToolButton* dimensionButton;
 };
+
+#endif // MAINWINDOW_H

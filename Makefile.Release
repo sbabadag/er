@@ -338,8 +338,19 @@ build/moc/moc_GLWidget.cpp: include/GLWidget.h \
 		../../Qt/6.8.1/mingw_64/include/QtWidgets/QStatusBar \
 		../../Qt/6.8.1/mingw_64/include/QtWidgets/qstatusbar.h \
 		../../Qt/6.8.1/mingw_64/include/QtCore/QString \
-		include/Line.h \
 		../../Qt/6.8.1/mingw_64/include/QtGui/QColor \
+		../../Qt/6.8.1/mingw_64/include/QtWidgets/QPushButton \
+		../../Qt/6.8.1/mingw_64/include/QtWidgets/qpushbutton.h \
+		../../Qt/6.8.1/mingw_64/include/QtWidgets/qabstractbutton.h \
+		../../Qt/6.8.1/mingw_64/include/QtWidgets/QToolButton \
+		../../Qt/6.8.1/mingw_64/include/QtWidgets/qtoolbutton.h \
+		../../Qt/6.8.1/mingw_64/include/QtCore/QTimer \
+		../../Qt/6.8.1/mingw_64/include/QtCore/qtimer.h \
+		../../Qt/6.8.1/mingw_64/include/QtCore/qbasictimer.h \
+		../../Qt/6.8.1/mingw_64/include/QtCore/QDateTime \
+		../../Qt/6.8.1/mingw_64/include/QtCore/qdatetime.h \
+		../../Qt/6.8.1/mingw_64/include/QtCore/qcalendar.h \
+		include/Line.h \
 		include/DxfHandler.h \
 		../../Qt/6.8.1/mingw_64/include/QtCore/QTextStream \
 		include/GhostTracker.h \
@@ -542,6 +553,40 @@ build/moc/moc_MainWindow.cpp: include/MainWindow.h \
 		../../Qt/6.8.1/mingw_64/include/QtWidgets/qtabwidget.h \
 		../../Qt/6.8.1/mingw_64/include/QtWidgets/QStatusBar \
 		../../Qt/6.8.1/mingw_64/include/QtWidgets/qstatusbar.h \
+		../../Qt/6.8.1/mingw_64/include/QtOpenGLWidgets/QOpenGLWidget \
+		../../Qt/6.8.1/mingw_64/include/QtOpenGLWidgets/qopenglwidget.h \
+		../../Qt/6.8.1/mingw_64/include/QtOpenGLWidgets/qtopenglwidgetsglobal.h \
+		../../Qt/6.8.1/mingw_64/include/QtOpenGLWidgets/qtopenglwidgetsexports.h \
+		../../Qt/6.8.1/mingw_64/include/QtWidgets/QWidget \
+		../../Qt/6.8.1/mingw_64/include/QtGui/QSurfaceFormat \
+		../../Qt/6.8.1/mingw_64/include/QtGui/qsurfaceformat.h \
+		../../Qt/6.8.1/mingw_64/include/QtGui/qopengl.h \
+		../../Qt/6.8.1/mingw_64/include/QtGui/qopenglext.h \
+		../../Qt/6.8.1/mingw_64/include/QtCore/qt_windows.h \
+		../../Qt/6.8.1/mingw_64/include/QtGui/QOpenGLFunctions \
+		../../Qt/6.8.1/mingw_64/include/QtGui/qopenglfunctions.h \
+		../../Qt/6.8.1/mingw_64/include/QtGui/qopenglcontext.h \
+		../../Qt/6.8.1/mingw_64/include/QtGui/qopenglcontext_platform.h \
+		include/GLWidget.h \
+		../../Qt/6.8.1/mingw_64/include/QtGui/QVector2D \
+		../../Qt/6.8.1/mingw_64/include/QtCore/QString \
+		../../Qt/6.8.1/mingw_64/include/QtGui/QColor \
+		../../Qt/6.8.1/mingw_64/include/QtWidgets/QPushButton \
+		../../Qt/6.8.1/mingw_64/include/QtWidgets/qpushbutton.h \
+		../../Qt/6.8.1/mingw_64/include/QtWidgets/qabstractbutton.h \
+		../../Qt/6.8.1/mingw_64/include/QtWidgets/QToolButton \
+		../../Qt/6.8.1/mingw_64/include/QtWidgets/qtoolbutton.h \
+		../../Qt/6.8.1/mingw_64/include/QtCore/QTimer \
+		../../Qt/6.8.1/mingw_64/include/QtCore/qtimer.h \
+		../../Qt/6.8.1/mingw_64/include/QtCore/qbasictimer.h \
+		../../Qt/6.8.1/mingw_64/include/QtCore/QDateTime \
+		../../Qt/6.8.1/mingw_64/include/QtCore/qdatetime.h \
+		../../Qt/6.8.1/mingw_64/include/QtCore/qcalendar.h \
+		include/Line.h \
+		include/DxfHandler.h \
+		../../Qt/6.8.1/mingw_64/include/QtCore/QTextStream \
+		include/GhostTracker.h \
+		../../Qt/6.8.1/mingw_64/include/QtCore/QPointF \
 		build/moc/moc_predefs.h \
 		../../Qt/6.8.1/mingw_64/bin/moc.exe
 	C:\Qt\6.8.1\mingw_64\bin\moc.exe $(DEFINES) --include C:/RN/er/build/moc/moc_predefs.h -IC:/Qt/6.8.1/mingw_64/mkspecs/win32-g++ -IC:/RN/er -IC:/RN/er/include -IC:/Qt/6.8.1/mingw_64/include -IC:/Qt/6.8.1/mingw_64/include/QtCore -IC:/Qt/6.8.1/mingw_64/include/QtGui -IC:/Qt/6.8.1/mingw_64/include/QtWidgets -IC:/Qt/6.8.1/mingw_64/include/QtOpenGL -IC:/Qt/6.8.1/mingw_64/include/QtOpenGLWidgets -IC:/Qt/6.8.1/mingw_64/include -IC:/Qt/6.8.1/mingw_64/include/QtOpenGLWidgets -IC:/Qt/6.8.1/mingw_64/include/QtOpenGL -IC:/Qt/6.8.1/mingw_64/include/QtWidgets -IC:/Qt/6.8.1/mingw_64/include/QtGui -IC:/Qt/6.8.1/mingw_64/include/QtCore -IC:/Qt/Tools/mingw1310_64/lib/gcc/x86_64-w64-mingw32/13.1.0/include/c++ -IC:/Qt/Tools/mingw1310_64/lib/gcc/x86_64-w64-mingw32/13.1.0/include/c++/x86_64-w64-mingw32 -IC:/Qt/Tools/mingw1310_64/lib/gcc/x86_64-w64-mingw32/13.1.0/include/c++/backward -IC:/Qt/Tools/mingw1310_64/lib/gcc/x86_64-w64-mingw32/13.1.0/include -IC:/Qt/Tools/mingw1310_64/lib/gcc/x86_64-w64-mingw32/13.1.0/include-fixed -IC:/Qt/Tools/mingw1310_64/x86_64-w64-mingw32/include include\MainWindow.h -o build\moc\moc_MainWindow.cpp
@@ -759,7 +804,41 @@ build/obj/main.o: src/main.cpp ../../Qt/6.8.1/mingw_64/include/QtWidgets/QApplic
 		../../Qt/6.8.1/mingw_64/include/QtGui/qscreen_platform.h \
 		../../Qt/6.8.1/mingw_64/include/QtWidgets/qtabwidget.h \
 		../../Qt/6.8.1/mingw_64/include/QtWidgets/QStatusBar \
-		../../Qt/6.8.1/mingw_64/include/QtWidgets/qstatusbar.h
+		../../Qt/6.8.1/mingw_64/include/QtWidgets/qstatusbar.h \
+		../../Qt/6.8.1/mingw_64/include/QtOpenGLWidgets/QOpenGLWidget \
+		../../Qt/6.8.1/mingw_64/include/QtOpenGLWidgets/qopenglwidget.h \
+		../../Qt/6.8.1/mingw_64/include/QtOpenGLWidgets/qtopenglwidgetsglobal.h \
+		../../Qt/6.8.1/mingw_64/include/QtOpenGLWidgets/qtopenglwidgetsexports.h \
+		../../Qt/6.8.1/mingw_64/include/QtWidgets/QWidget \
+		../../Qt/6.8.1/mingw_64/include/QtGui/QSurfaceFormat \
+		../../Qt/6.8.1/mingw_64/include/QtGui/qsurfaceformat.h \
+		../../Qt/6.8.1/mingw_64/include/QtGui/qopengl.h \
+		../../Qt/6.8.1/mingw_64/include/QtGui/qopenglext.h \
+		../../Qt/6.8.1/mingw_64/include/QtCore/qt_windows.h \
+		../../Qt/6.8.1/mingw_64/include/QtGui/QOpenGLFunctions \
+		../../Qt/6.8.1/mingw_64/include/QtGui/qopenglfunctions.h \
+		../../Qt/6.8.1/mingw_64/include/QtGui/qopenglcontext.h \
+		../../Qt/6.8.1/mingw_64/include/QtGui/qopenglcontext_platform.h \
+		include/GLWidget.h \
+		../../Qt/6.8.1/mingw_64/include/QtGui/QVector2D \
+		../../Qt/6.8.1/mingw_64/include/QtCore/QString \
+		../../Qt/6.8.1/mingw_64/include/QtGui/QColor \
+		../../Qt/6.8.1/mingw_64/include/QtWidgets/QPushButton \
+		../../Qt/6.8.1/mingw_64/include/QtWidgets/qpushbutton.h \
+		../../Qt/6.8.1/mingw_64/include/QtWidgets/qabstractbutton.h \
+		../../Qt/6.8.1/mingw_64/include/QtWidgets/QToolButton \
+		../../Qt/6.8.1/mingw_64/include/QtWidgets/qtoolbutton.h \
+		../../Qt/6.8.1/mingw_64/include/QtCore/QTimer \
+		../../Qt/6.8.1/mingw_64/include/QtCore/qtimer.h \
+		../../Qt/6.8.1/mingw_64/include/QtCore/qbasictimer.h \
+		../../Qt/6.8.1/mingw_64/include/QtCore/QDateTime \
+		../../Qt/6.8.1/mingw_64/include/QtCore/qdatetime.h \
+		../../Qt/6.8.1/mingw_64/include/QtCore/qcalendar.h \
+		include/Line.h \
+		include/DxfHandler.h \
+		../../Qt/6.8.1/mingw_64/include/QtCore/QTextStream \
+		include/GhostTracker.h \
+		../../Qt/6.8.1/mingw_64/include/QtCore/QPointF
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o build\obj\main.o src\main.cpp
 
 build/obj/GLWidget.o: src/GLWidget.cpp include/GLWidget.h \
@@ -969,8 +1048,19 @@ build/obj/GLWidget.o: src/GLWidget.cpp include/GLWidget.h \
 		../../Qt/6.8.1/mingw_64/include/QtWidgets/QStatusBar \
 		../../Qt/6.8.1/mingw_64/include/QtWidgets/qstatusbar.h \
 		../../Qt/6.8.1/mingw_64/include/QtCore/QString \
-		include/Line.h \
 		../../Qt/6.8.1/mingw_64/include/QtGui/QColor \
+		../../Qt/6.8.1/mingw_64/include/QtWidgets/QPushButton \
+		../../Qt/6.8.1/mingw_64/include/QtWidgets/qpushbutton.h \
+		../../Qt/6.8.1/mingw_64/include/QtWidgets/qabstractbutton.h \
+		../../Qt/6.8.1/mingw_64/include/QtWidgets/QToolButton \
+		../../Qt/6.8.1/mingw_64/include/QtWidgets/qtoolbutton.h \
+		../../Qt/6.8.1/mingw_64/include/QtCore/QTimer \
+		../../Qt/6.8.1/mingw_64/include/QtCore/qtimer.h \
+		../../Qt/6.8.1/mingw_64/include/QtCore/qbasictimer.h \
+		../../Qt/6.8.1/mingw_64/include/QtCore/QDateTime \
+		../../Qt/6.8.1/mingw_64/include/QtCore/qdatetime.h \
+		../../Qt/6.8.1/mingw_64/include/QtCore/qcalendar.h \
+		include/Line.h \
 		include/DxfHandler.h \
 		../../Qt/6.8.1/mingw_64/include/QtCore/QTextStream \
 		include/GhostTracker.h \
@@ -981,7 +1071,7 @@ build/obj/GLWidget.o: src/GLWidget.cpp include/GLWidget.h \
 		../../Qt/6.8.1/mingw_64/include/QtGui/qpainter.h \
 		../../Qt/6.8.1/mingw_64/include/QtGui/qtextoption.h \
 		../../Qt/6.8.1/mingw_64/include/QtGui/qpen.h \
-		include/SnapManager.h
+		src/SnapManager.h
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o build\obj\GLWidget.o src\GLWidget.cpp
 
 build/obj/MainWindow.o: src/MainWindow.cpp include/MainWindow.h \
@@ -1178,7 +1268,6 @@ build/obj/MainWindow.o: src/MainWindow.cpp include/MainWindow.h \
 		../../Qt/6.8.1/mingw_64/include/QtWidgets/qtabwidget.h \
 		../../Qt/6.8.1/mingw_64/include/QtWidgets/QStatusBar \
 		../../Qt/6.8.1/mingw_64/include/QtWidgets/qstatusbar.h \
-		include/GLWidget.h \
 		../../Qt/6.8.1/mingw_64/include/QtOpenGLWidgets/QOpenGLWidget \
 		../../Qt/6.8.1/mingw_64/include/QtOpenGLWidgets/qopenglwidget.h \
 		../../Qt/6.8.1/mingw_64/include/QtOpenGLWidgets/qtopenglwidgetsglobal.h \
@@ -1193,10 +1282,22 @@ build/obj/MainWindow.o: src/MainWindow.cpp include/MainWindow.h \
 		../../Qt/6.8.1/mingw_64/include/QtGui/qopenglfunctions.h \
 		../../Qt/6.8.1/mingw_64/include/QtGui/qopenglcontext.h \
 		../../Qt/6.8.1/mingw_64/include/QtGui/qopenglcontext_platform.h \
+		include/GLWidget.h \
 		../../Qt/6.8.1/mingw_64/include/QtGui/QVector2D \
 		../../Qt/6.8.1/mingw_64/include/QtCore/QString \
-		include/Line.h \
 		../../Qt/6.8.1/mingw_64/include/QtGui/QColor \
+		../../Qt/6.8.1/mingw_64/include/QtWidgets/QPushButton \
+		../../Qt/6.8.1/mingw_64/include/QtWidgets/qpushbutton.h \
+		../../Qt/6.8.1/mingw_64/include/QtWidgets/qabstractbutton.h \
+		../../Qt/6.8.1/mingw_64/include/QtWidgets/QToolButton \
+		../../Qt/6.8.1/mingw_64/include/QtWidgets/qtoolbutton.h \
+		../../Qt/6.8.1/mingw_64/include/QtCore/QTimer \
+		../../Qt/6.8.1/mingw_64/include/QtCore/qtimer.h \
+		../../Qt/6.8.1/mingw_64/include/QtCore/qbasictimer.h \
+		../../Qt/6.8.1/mingw_64/include/QtCore/QDateTime \
+		../../Qt/6.8.1/mingw_64/include/QtCore/qdatetime.h \
+		../../Qt/6.8.1/mingw_64/include/QtCore/qcalendar.h \
+		include/Line.h \
 		include/DxfHandler.h \
 		../../Qt/6.8.1/mingw_64/include/QtCore/QTextStream \
 		include/GhostTracker.h \
@@ -1213,8 +1314,6 @@ build/obj/MainWindow.o: src/MainWindow.cpp include/MainWindow.h \
 		../../Qt/6.8.1/mingw_64/include/QtCore/qdir.h \
 		../../Qt/6.8.1/mingw_64/include/QtCore/qdirlisting.h \
 		../../Qt/6.8.1/mingw_64/include/QtCore/qfiledevice.h \
-		../../Qt/6.8.1/mingw_64/include/QtCore/qdatetime.h \
-		../../Qt/6.8.1/mingw_64/include/QtCore/qcalendar.h \
 		../../Qt/6.8.1/mingw_64/include/QtCore/qfile.h \
 		../../Qt/6.8.1/mingw_64/include/QtCore/qfileinfo.h \
 		../../Qt/6.8.1/mingw_64/include/QtCore/qtimezone.h \
@@ -1226,7 +1325,7 @@ build/obj/MainWindow.o: src/MainWindow.cpp include/MainWindow.h \
 		../../Qt/6.8.1/mingw_64/include/QtWidgets/qcolordialog.h
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o build\obj\MainWindow.o src\MainWindow.cpp
 
-build/obj/SnapManager.o: src/SnapManager.cpp include/SnapManager.h \
+build/obj/SnapManager.o: src/SnapManager.cpp src/SnapManager.h \
 		../../Qt/6.8.1/mingw_64/include/QtGui/QVector2D \
 		../../Qt/6.8.1/mingw_64/include/QtGui/qvectornd.h \
 		../../Qt/6.8.1/mingw_64/include/QtGui/qtguiglobal.h \

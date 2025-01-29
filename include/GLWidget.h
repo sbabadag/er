@@ -1,13 +1,20 @@
-#pragma once
+#ifndef GLWIDGET_H
+#define GLWIDGET_H
+
 #include <QOpenGLWidget>
 #include <QOpenGLFunctions>
 #include <QVector2D>
 #include <QStatusBar>
 #include <vector>
 #include <QString>
-#include "Line.h"  // Include Line struct
-#include "DxfHandler.h"  // Add this include
-#include "GhostTracker.h"  // Add this include
+#include <QColor>
+#include <QPushButton>
+#include <QToolButton>  // Add QToolButton include
+#include <QTimer>
+#include <QDateTime>  // Add QDateTime include
+#include "Line.h"
+#include "DxfHandler.h"
+#include "GhostTracker.h"
 
 class SnapManager;  // Forward declare SnapManager
 
@@ -16,7 +23,7 @@ class GLWidget : public QOpenGLWidget, protected QOpenGLFunctions
     Q_OBJECT
 
 public:
-    GLWidget(QWidget* parent = nullptr);
+    explicit GLWidget(QWidget* parent = nullptr);
     virtual ~GLWidget();  // Add virtual destructor
     void addLine(const QVector2D& start, const QVector2D& end);
     void setStatusBar(QStatusBar* statusBar);
@@ -38,7 +45,8 @@ public:
         MODE_NONE,
         MODE_LINE,
         MODE_DIMENSION,
-        MODE_MOVE  // Add MODE_MOVE
+        MODE_MOVE,  // Add MODE_MOVE
+        MODE_DELETE  // Add delete mode
     };
 
     // Setter for currentMode
@@ -62,8 +70,16 @@ public:
     QColor getCurrentColor() const { return currentColor; }
     void setSelectedObjectsColor(const QColor& color);
 
+    // Add method to set tool buttons
+    void setToolButtons(QToolButton* line, QToolButton* move, 
+                       QToolButton* del, QToolButton* dimension);
+
 signals:
     void commandChanged(const QString& newCommand);
+
+public slots:
+    void deleteSelectedObjects();
+    void startDeleteMode();  // Add new slot
 
 protected:
     void initializeGL() override;
@@ -74,6 +90,7 @@ protected:
     void mouseReleaseEvent(QMouseEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
+    void keyReleaseEvent(QKeyEvent* event) override;  // Add keyReleaseEvent
 
 private:
     QVector2D screenToWorld(const QPoint& screenPos);
@@ -95,8 +112,11 @@ private:
     };
 
     // Drawing state
-    bool isDrawing;
     bool hasFirstPoint;
+    bool isSelectingRectangle;
+    bool isDragging;
+    bool isCrossingSelection;
+    bool isDrawing;
     bool lineToolActive;
     QVector2D firstPoint;
     QVector2D currentStart;
@@ -149,7 +169,7 @@ private:
     bool isMoving;
 
     // Rectangle selection state
-    bool isSelectingRectangle; // Moved below hasMoveEnd
+    // bool isSelectingRectangle; // Moved below hasMoveEnd
 
     // Selection rectangle positions
     QPoint selectionStartPos;    // Declare selection start position
@@ -183,5 +203,166 @@ private:
     // Add current color property
     QColor currentColor;
 
-    bool isDragging;  // Track mouse dragging state
+    // bool isDragging;  // Track mouse dragging state
+    // bool isCrossingSelection;  // Add this member variable
+
+    // Add helper function for line intersection
+    bool linesIntersect(const QVector2D& p1, const QVector2D& p2,
+                       const QVector2D& q1, const QVector2D& q2) const;
+
+    QString modeToString() const;  // Add helper function
+
+    // Tool button pointers
+    QToolButton* lineButton = nullptr;
+    QToolButton* moveButton = nullptr;
+    QToolButton* deleteButton = nullptr;
+    QToolButton* dimensionButton = nullptr;
+
+    // Add temporary point storage
+    QVector2D tempPoint;
+    bool hasTempPoint = false;
+    float tempPointLifetime = 0.0f;  // Time in seconds the temp point should remain
+
+    // Function to clear temporary point
+    void clearTempPoint();
+
+    // Snap point history and construction
+    struct SnapHistory {
+        QVector2D point;
+        QVector2D direction;  // Store direction for perpendicular calculations
+        float timestamp;
+        bool isActive;
+    };
+
+    SnapHistory lastSnap = {QVector2D(0,0), QVector2D(0,0), 0.0f, false};
+    QVector2D tempConstructPoint;  // Store construction/perpendicular point
+    bool hasTempConstructPoint = false;
+    float snapHistoryTimeout = 2.0f;  // Seconds to keep snap history
+
+    void updateSnapHistory(const QVector2D& snapPoint, const QVector2D& dir);
+    void clearSnapHistory();
+    QVector2D calculatePerpendicularPoint(const QVector2D& currentPoint);
+    
+    // Timer for managing snap history
+    QTimer* snapHistoryTimer;
+
+    // Track point system 
+    struct TrackPoint {
+        QVector2D point;
+        QVector2D direction;  // For parallel/perpendicular tracking
+        qint64 timestamp;
+        bool isBase;     // True if this is the base point for construction
+        enum Type {
+            SNAP,
+            TRACK,
+            PARALLEL,
+            PERP
+        } type;
+    };
+    
+    std::vector<TrackPoint> trackPoints;
+    TrackPoint currentTrackPoint;
+    bool hasTrackPoint = false;
+    float trackTimeout = 2.0f;
+
+    // Track point methods
+    void setTrackPoint(const QVector2D& point, const QVector2D& dir);
+    void clearTrackPoint();
+    void drawTrackPoint() const;
+    QVector2D getConstructionPoint(const QVector2D& currentPos) const;
+    void addTrackPoint(const QVector2D& point, const QVector2D& dir, TrackPoint::Type type);
+    void updateTrackPoints();
+    void drawTrackPoints() const;
+    
+    // Timer for track point cleanup
+    QTimer* trackTimer;
+
+    // Helper functions for track point calculations
+    QVector2D calculatePerpendicularPoint(const QVector2D& base, const QVector2D& ref, const QVector2D& dir) const;
+    QVector2D calculateParallelPoint(const QVector2D& base, const QVector2D& ref, const QVector2D& dir) const;
+
+    // Add intersection tracking
+    struct IntersectionPoint {
+        QVector2D point;
+        bool isValid;
+    };
+    
+    IntersectionPoint tempIntersection;
+    void updateIntersectionPoint(const QVector2D& snapPoint);
+    QVector2D calculateIntersection(const QVector2D& p1, const QVector2D& dir1,
+                                  const QVector2D& p2, const QVector2D& dir2) const;
+    
+    // Track last two snap points for intersection
+    struct SnapPoint {
+        QVector2D point;
+        QVector2D direction;
+    };
+    SnapPoint lastSnapPoints[2];
+    int currentSnapIndex = 0;
+
+    struct TrackLine {
+        QVector2D start;
+        QVector2D end;
+        bool isActive;
+    };
+    
+    // Track lines for intersection
+    TrackLine trackLines[2];
+    void updateTrackLine(const QVector2D& snapPoint);
+    void drawTrackLines(); // Remove const qualifier
+    void clearTrackLines();
+
+    // Track points storage for temporary construction
+    struct TrackingState {
+        QVector2D point;      // Base point for tracking
+        QVector2D direction;  // Track line direction
+        bool isActive;
+        qint64 timestamp;  // Add timestamp field
+        enum Type {
+            NORMAL,     // Standard tracking
+            ORTHO,      // Orthogonal tracking (0, 90, 180, 270)
+            PERP,       // Perpendicular tracking
+            PARALLEL    // Parallel tracking
+        } type;
+    };
+    
+    std::vector<TrackingState> trackingPoints;  // Store multiple tracking points
+    float trackingTimeout = 5.0f;  // How long tracking points remain active
+    
+    void updateTracking(const QVector2D& snapPoint);
+    void drawTrackingLines();
+    void clearTracking();
+    QVector2D findTrackingIntersection(const QVector2D& mousePos);
+    bool checkPerpendicularTracking(const QVector2D& point, const QVector2D& line);
+    bool checkParallelTracking(const QVector2D& point, const QVector2D& line);
+    
+    // Visual feedback
+    void drawTrackingPoint(const TrackingState& track);
+    void drawConstructionLines();
+
+    // Add helper function for distance calculation
+    float calculateDistanceToLine(const QVector2D& point, const QVector2D& linePoint, 
+                                const QVector2D& lineDir) const {
+        QVector2D v = point - linePoint;
+        float proj = QVector2D::dotProduct(v, lineDir);
+        QVector2D projPoint = linePoint + lineDir * proj;
+        return (point - projPoint).length();
+    }
+
+    // Add shift-snap tracking
+    struct ShiftSnapPoint {
+        QVector2D point;
+        bool isActive;
+        QVector2D direction;  // Direction from previous point
+    };
+    
+    ShiftSnapPoint shiftSnaps[2];  // Store two shift-snap points
+    int currentShiftSnap = 0;      // Track which point we're on
+    bool isShiftSnapping = false;   // Track if shift is being held
+
+    void handleShiftSnap(const QVector2D& point);
+    void clearShiftSnaps();
+    void drawShiftSnapLines();
 };
+
+#endif // GLWIDGET_H

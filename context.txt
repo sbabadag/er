@@ -1,0 +1,7 @@
+﻿    if (event->key() == Qt::Key_Shift) {
+        if (snapManager->isSnapActive()) {
+            isShiftSnapping = true;
+            handleShiftSnap(snapManager->getCurrentSnapPoint());
+        }
+    }
+    update();

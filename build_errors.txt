@@ -1,0 +1,19 @@
+In file included from src\GLWidget.cpp:1:
+src\../include/GLWidget.h: In constructor 'GLWidget::GLWidget(QWidget*)':
+src\../include/GLWidget.h:361:10: warning: 'GLWidget::isShiftSnapping' will be initialized after [-Wreorder]
+  361 |     bool isShiftSnapping = false;   // Track if shift is being held
+      |          ^~~~~~~~~~~~~~~
+src\../include/GLWidget.h:360:9: warning:   'int GLWidget::currentShiftSnap' [-Wreorder]
+  360 |     int currentShiftSnap = 0;      // Track which point we're on
+      |         ^~~~~~~~~~~~~~~~
+src\GLWidget.cpp:10:1: warning:   when initialized here [-Wreorder]
+   10 | GLWidget::GLWidget(QWidget* parent)
+      | ^~~~~~~~
+src\GLWidget.cpp: In member function 'virtual void GLWidget::keyPressEvent(QKeyEvent*)':
+src\GLWidget.cpp:678:41: error: 'class SnapManager' has no member named 'hasCurrentSnapPoint'; did you mean 'getCurrentSnapPoint'?
+  678 |         if (snapManager && snapManager->hasCurrentSnapPoint()) {
+      |                                         ^~~~~~~~~~~~~~~~~~~
+      |                                         getCurrentSnapPoint
+mingw32-make.exe[1]: *** [Makefile.Release:1075: build/obj/GLWidget.o] Error 1
+mingw32-make.exe[1]: *** Waiting for unfinished jobs....
+mingw32-make.exe: *** [Makefile:45: release] Error 2
