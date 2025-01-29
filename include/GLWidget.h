@@ -182,4 +182,6 @@ private:
 
     // Add current color property
     QColor currentColor;
+
+    bool isDragging;  // Track mouse dragging state
 };

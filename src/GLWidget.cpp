@@ -1,4 +1,4 @@
-#include "GLWidget.h"
+#include "../include/GLWidget.h"
 #include <QMouseEvent>
 #include <QWheelEvent>
 #include <GL/gl.h>
@@ -33,9 +33,9 @@ GLWidget::GLWidget(QWidget* parent)
     , objectSelected(false)
     , selectedObjectIndex(-1)
     , isMoving(false)
-    , isDragging(false)            // Initialize dragging state
-    , isSelectingRectangle(false)  // Initialize rectangle selection state
-    , isAwaitingMoveStartPoint(false) // Initialize new variable
+    , isAwaitingMoveStartPoint(false)  // Match header order
+    , isDragging(false)                // Match header order
+    , isSelectingRectangle(false)
     , isAwaitingMoveEndPoint(false)   // Initialize new variable
     , isZooming(false)               // Initialize zoom state
     , zoomStartPos(QPoint())         // Initialize zoom start position
@@ -69,9 +69,9 @@ void GLWidget::paintGL()
     glClear(GL_COLOR_BUFFER_BIT);
     glLoadIdentity();
     
-    // Apply view transformation
-    glTranslatef(pan.x(), pan.y(), 0);
+    // Handle pan and zoom in world coordinates
     glScalef(zoom, zoom, 1.0f);
+    glTranslatef(pan.x() / zoom, pan.y() / zoom, 0);
 
     // Draw existing lines
     for (size_t i = 0; i < lines.size(); ++i) {
@@ -90,6 +90,11 @@ void GLWidget::paintGL()
         glEnd();
     }
 
+    // Draw ghost preview if in move mode and tracking
+    if (currentMode == MODE_MOVE && ghostTracker.isTracking()) {
+        renderGhostObjects();
+    }
+
     // Draw dimensions
     glColor3f(0.0f, 1.0f, 0.0f);  // Green color for dimensions
     for (const auto& dim : dimensions) {
@@ -98,7 +103,6 @@ void GLWidget::paintGL()
 
     // Draw snap marker using SnapManager
     if (snapManager->isSnapActive()) {
-        // Pass pan and zoom to drawSnapMarker
         snapManager->drawSnapMarker(pan, zoom);
     }
 
@@ -111,8 +115,8 @@ void GLWidget::paintGL()
         glEnd();
     }
 
-    // Remove ghost line rendering
-    // ...existing code to remove ghost lines...
+    // Draw selection rectangle if active
+    if (isSelectingRectangle) {
         glColor3f(0.0f, 1.0f, 0.0f);  // Green color for selection rectangle
         glBegin(GL_LINE_LOOP);
         QVector2D topLeft = screenToWorld(selectionRect.topLeft());
@@ -125,18 +129,25 @@ void GLWidget::paintGL()
         glVertex2f(bottomRight.x(), bottomRight.y());
         glVertex2f(bottomLeft.x(), bottomLeft.y());
         glEnd();
-
-    // Draw ghost preview if tracking
-    if (currentMode == MODE_MOVE) {
-        renderGhostObjects();
     }
 }
 
 QVector2D GLWidget::snapPoint(const QVector2D& point)
 {
-    // Let SnapManager handle all snap logic
-    snapManager->updateSnap(point);
-    return snapManager->isSnapActive() ? snapManager->getCurrentSnapPoint() : point;
+    // Convert the point to world space for consistent snapping
+    QVector2D worldPoint = point;
+    
+    // Update snap system with current settings
+    snapManager->updateSettings(snapThreshold, zoom, lines);
+    snapManager->updateSnap(worldPoint);
+    
+    if (snapManager->isSnapActive()) {
+        // Get snap point in world coordinates
+        QVector2D snapPoint = snapManager->getCurrentSnapPoint();
+        return snapPoint;
+    }
+    
+    return point;
 }
 
 void GLWidget::resizeGL(int w, int h)
@@ -150,15 +161,18 @@ void GLWidget::resizeGL(int w, int h)
 
 QVector2D GLWidget::screenToWorld(const QPoint& screenPos)
 {
-    QVector2D pos(screenPos.x() - width()/2.0f, height()/2.0f - screenPos.y());
-    return (pos - pan) / zoom;
+    return QVector2D(
+        (screenPos.x() - width()/2.0f - pan.x()) / zoom,
+        (-screenPos.y() + height()/2.0f - pan.y()) / zoom
+    );
 }
 
 QVector2D GLWidget::worldToScreen(const QVector2D& worldPos)
 {
-    // Existing transformation plus centering
-    QVector2D pos = worldPos * zoom + pan + QVector2D(width() / 2.0f, height() / 2.0f);
-    return pos;
+    return QVector2D(
+        worldPos.x() * zoom + width()/2.0f + pan.x(),
+        -worldPos.y() * zoom + height()/2.0f + pan.y()
+    );
 }
 
 QVector2D GLWidget::constrainToOrtho(const QVector2D& start, const QVector2D& end)
@@ -181,6 +195,12 @@ void GLWidget::mousePressEvent(QMouseEvent* event)
 {
     QVector2D worldPos = screenToWorld(event->pos());
     QVector2D snappedPos = snapPoint(worldPos);
+
+    if (event->button() == Qt::MiddleButton) {
+        lastMousePos = event->pos();
+        setCursor(Qt::ClosedHandCursor);
+        return;
+    }
 
     if (event->button() == Qt::LeftButton) {
         if (currentMode == MODE_MOVE) {
@@ -271,32 +291,49 @@ void GLWidget::mousePressEvent(QMouseEvent* event)
 
 void GLWidget::mouseMoveEvent(QMouseEvent* event)
 {
-    QVector2D worldPos = screenToWorld(event->pos());
-    QVector2D snappedPos = snapPoint(worldPos);
-
-    // Update ghost preview during any stage of move
-    if (currentMode == MODE_MOVE && ghostTracker.isTracking()) {
-        if (isAwaitingMoveEndPoint) {
-            // Show ghost at potential final position
-            QVector2D delta = snappedPos - moveStartPoint;
-            ghostTracker.updateGhost(QPointF(delta.x(), delta.y()));
-        } else if (isAwaitingMoveStartPoint) {
-            // Show ghost at current position
-            ghostTracker.updateGhost(QPointF(snappedPos.x(), snappedPos.y()));
-        }
+    if (event->buttons() & Qt::MiddleButton) {
+        QPoint delta = event->pos() - lastMousePos;
+        // Invert Y direction for natural panning
+        pan += QVector2D(delta.x(), -delta.y()) / zoom;
+        lastMousePos = event->pos();
         update();
+        return;
     }
+
+    QVector2D worldPos = screenToWorld(event->pos());
+    
+    // Update snap settings before getting snapped position
+    snapManager->updateSettings(snapThreshold, zoom, lines);
+    QVector2D snappedPos = snapPoint(worldPos);
 
     // Update coordinates and snap markers
     snapManager->updateSnap(worldPos);
     updateCoordinates(snappedPos);
 
-    // Handle other mouse move events
-    // ...existing code for other modes...
+    // Update line preview while drawing
+    if (isDrawing && hasFirstPoint) {
+        currentEnd = orthoMode ? constrainToOrtho(currentStart, snappedPos) : snappedPos;
+        if (hasLengthConstraint && targetLength > 0) {
+            applyLengthConstraint(currentEnd);
+        }
+        update();
+    }
 
+    // Handle ghost preview for move mode
     if (currentMode == MODE_MOVE && ghostTracker.isTracking()) {
-        QVector2D worldPos = screenToWorld(event->pos());
-        ghostTracker.updateGhost(QPointF(worldPos.x(), worldPos.y()));
+        if (isAwaitingMoveEndPoint) {
+            QVector2D delta = snappedPos - moveStartPoint;
+            ghostTracker.updateGhost(QPointF(delta.x(), delta.y()));
+        } else if (isAwaitingMoveStartPoint) {
+            ghostTracker.updateGhost(QPointF(snappedPos.x(), snappedPos.y()));
+        }
+        update();
+    }
+
+    // Handle selection rectangle
+    if (isSelectingRectangle) {
+        selectionEndPos = event->pos();
+        selectionRect = QRect(selectionStartPos, selectionEndPos).normalized();
         update();
     }
 
@@ -306,6 +343,11 @@ void GLWidget::mouseMoveEvent(QMouseEvent* event)
 // Remove or comment out isDragging related code in mouseReleaseEvent
 void GLWidget::mouseReleaseEvent(QMouseEvent* event)
 {
+    if (event->button() == Qt::MiddleButton) {
+        setCursor(Qt::ArrowCursor);
+        return;
+    }
+
     QVector2D worldPos = screenToWorld(event->pos());
     QVector2D snappedPos = snapPoint(worldPos);
 
@@ -344,12 +386,21 @@ void GLWidget::mouseReleaseEvent(QMouseEvent* event)
 
 void GLWidget::wheelEvent(QWheelEvent* event)
 {
+    QVector2D mouseWorld = screenToWorld(event->position().toPoint());
+    
     float zoomFactor = event->angleDelta().y() > 0 ? 1.1f : 0.9f;
-    zoom *= zoomFactor;
+    float newZoom = zoom * zoomFactor;
+    newZoom = std::clamp(newZoom, 0.01f, 100.0f);
+    
+    // Keep mouse position fixed in world space during zoom
+    QVector2D oldWorld = mouseWorld;
+    zoom = newZoom;
+    QVector2D newWorld = screenToWorld(event->position().toPoint());
+    pan += (newWorld - oldWorld) * zoom;
 
-    // Update SnapManager with new zoom and snapThreshold
-    snapManager->updateSettings(snapThreshold, zoom, lines);
-
+    float worldThreshold = snapThreshold / zoom;
+    snapManager->updateSettings(worldThreshold, zoom, lines);
+    
     update();
 }
 
